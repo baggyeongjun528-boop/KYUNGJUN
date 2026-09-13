@@ -1,0 +1,8 @@
+{
+  "name": "Remix Quant Bottom Monitor",
+  "description": "미국 증시 퀀트 바닥 감시 및 지표 시각화, 실시간 알림 및 리포트 시스템",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
