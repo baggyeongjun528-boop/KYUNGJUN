@@ -163,12 +163,17 @@ export const MarketSnapshotCards: React.FC<MarketSnapshotCardsProps> = ({ metric
           <h3 className="text-sm font-bold text-slate-200">
             ⏱️ 1. 실시간 미국 증시 & 거시 매크로 스냅샷
           </h3>
-          {isStreaming && (
+          {metrics.session === 'CLOSED' ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-full border border-slate-700/60">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+              휴장 (직전 공식 종가 유지)
+            </span>
+          ) : isStreaming ? (
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
               실시간 틱 반영
             </span>
-          )}
+          ) : null}
         </div>
         <span className="text-xs text-slate-400 mono-num flex items-center gap-1.5">
           <span className="text-slate-500">선물:</span>

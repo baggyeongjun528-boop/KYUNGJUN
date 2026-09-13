@@ -39,7 +39,6 @@ export const App: React.FC = () => {
   const [isAutoRefresh, setIsAutoRefresh] = useState<boolean>(true);
   const [refreshIntervalSec, setRefreshIntervalSec] = useState<number>(5);
   const [secondsRemaining, setSecondsRemaining] = useState<number>(5);
-  const [enableMicroTicks, setEnableMicroTicks] = useState<boolean>(true);
 
   // Modals & Drawers
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -197,57 +196,6 @@ export const App: React.FC = () => {
     return () => clearInterval(timer);
   }, [isAutoRefresh, refreshIntervalSec, activePresetId]);
 
-  // Micro-ticks for realistic high-frequency orderbook action
-  useEffect(() => {
-    if (!enableMicroTicks || activePresetId !== 'live_current') return;
-
-    const tickInterval = setInterval(() => {
-      setMetrics((prev) => {
-        const randSp = (Math.random() - 0.49) * 0.35;
-        const randNdx = (Math.random() - 0.49) * 1.4;
-        const randSpy = (Math.random() - 0.49) * 0.035;
-        const randQqq = (Math.random() - 0.49) * 0.045;
-        const randVix = (Math.random() - 0.5) * 0.015;
-
-        const newSp500Price = Number((prev.sp500.price + randSp).toFixed(2));
-        const newNdxPrice = Number((prev.nasdaq100.price + randNdx).toFixed(2));
-        const newSpyPrice = Number((prev.spy.price + randSpy).toFixed(2));
-        const newQqqPrice = Number((prev.qqq.price + randQqq).toFixed(2));
-        const newVixPrice = Number(Math.max(10, prev.vix.current + randVix).toFixed(2));
-
-        const now = new Date();
-        const kstStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-
-        return {
-          ...prev,
-          timestampKst: kstStr,
-          sp500: {
-            ...prev.sp500,
-            price: newSp500Price,
-          },
-          nasdaq100: {
-            ...prev.nasdaq100,
-            price: newNdxPrice,
-          },
-          spy: {
-            ...prev.spy,
-            price: newSpyPrice,
-          },
-          qqq: {
-            ...prev.qqq,
-            price: newQqqPrice,
-          },
-          vix: {
-            ...prev.vix,
-            current: newVixPrice,
-          },
-        };
-      });
-    }, 2800);
-
-    return () => clearInterval(tickInterval);
-  }, [enableMicroTicks, activePresetId]);
-
   const handleSelectPreset = (preset: MarketScenarioPreset) => {
     setMetrics(preset.metrics);
     setActivePresetId(preset.id);
@@ -316,8 +264,7 @@ export const App: React.FC = () => {
           isRefreshing={isRefreshing}
           onManualRefresh={handleRefresh}
           lastUpdatedTime={metrics.timestampKst}
-          enableMicroTicks={enableMicroTicks}
-          onToggleMicroTicks={() => setEnableMicroTicks(!enableMicroTicks)}
+          session={metrics.session}
         />
 
         {/* Live Active Toast Alert Popup */}

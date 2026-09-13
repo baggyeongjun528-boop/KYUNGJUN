@@ -11,8 +11,8 @@ export const PRESET_SCENARIOS: MarketScenarioPreset[] = [
     metrics: {
       timestampKst: '2026-09-13 23:30',
       timestampEst: '2026-09-13 10:30',
-      session: 'REGULAR',
-      isPreviousCloseBasis: false,
+      session: 'CLOSED',
+      isPreviousCloseBasis: true,
       sp500: {
         symbol: '^GSPC',
         name: 'S&P 500',

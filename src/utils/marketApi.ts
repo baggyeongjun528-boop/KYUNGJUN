@@ -15,6 +15,43 @@ interface YahooChartMeta {
   regularMarketDayLow?: number;
 }
 
+export function getUsMarketSession(date: Date = new Date()): {
+  session: 'REGULAR' | 'PRE_MARKET' | 'POST_MARKET' | 'CLOSED';
+  desc: string;
+} {
+  try {
+    const estString = date.toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const estDate = new Date(estString);
+    const day = estDate.getDay(); // 0: Sun, 1: Mon, ..., 6: Sat
+    const hour = estDate.getHours();
+    const minute = estDate.getMinutes();
+    const totalMinutes = hour * 60 + minute;
+
+    // Weekend (Saturday or Sunday)
+    if (day === 0 || day === 6) {
+      return { session: 'CLOSED', desc: '주말 휴장 (직전 마감 기준)' };
+    }
+
+    // Weekdays
+    // Pre-market: 04:00 - 09:30 EST (240 to 570 min)
+    if (totalMinutes >= 240 && totalMinutes < 570) {
+      return { session: 'PRE_MARKET', desc: '프리마켓' };
+    }
+    // Regular session: 09:30 - 16:00 EST (570 to 960 min)
+    if (totalMinutes >= 570 && totalMinutes < 960) {
+      return { session: 'REGULAR', desc: '정규장 실시간' };
+    }
+    // Post-market / After-hours: 16:00 - 20:00 EST (960 to 1200 min)
+    if (totalMinutes >= 960 && totalMinutes < 1200) {
+      return { session: 'POST_MARKET', desc: '애프터마켓' };
+    }
+    // Overnight closed
+    return { session: 'CLOSED', desc: '장마감 (직전 종가)' };
+  } catch {
+    return { session: 'CLOSED', desc: '마감 기준' };
+  }
+}
+
 export async function fetchLiveMarketData(current: MarketMetrics): Promise<MarketMetrics> {
   const symbolMap: { [key: string]: string } = {
     gspc: '^GSPC',
@@ -76,8 +113,12 @@ export async function fetchLiveMarketData(current: MarketMetrics): Promise<Marke
     const estTime = new Date(now.getTime() - 13 * 60 * 60 * 1000);
     const estStr = `${estTime.getFullYear()}-${(estTime.getMonth() + 1).toString().padStart(2, '0')}-${estTime.getDate().toString().padStart(2, '0')} ${estTime.getHours().toString().padStart(2, '0')}:${estTime.getMinutes().toString().padStart(2, '0')}:${estTime.getSeconds().toString().padStart(2, '0')}`;
 
+    const marketSession = getUsMarketSession(now);
+
     const updated: MarketMetrics = {
       ...current,
+      session: marketSession.session,
+      isPreviousCloseBasis: marketSession.session === 'CLOSED',
       timestampKst: kstStr,
       timestampEst: estStr,
     };
