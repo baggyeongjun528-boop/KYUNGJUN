@@ -24,6 +24,7 @@ import { CashAllocationCalculator } from './components/CashAllocationCalculator'
 import { QuantReportModal } from './components/QuantReportModal';
 import { AlertsManager } from './components/AlertsManager';
 import { InteractiveSimulatorDrawer } from './components/InteractiveSimulatorDrawer';
+import { LiveStreamingBar } from './components/LiveStreamingBar';
 import { MarketMetrics, QuantAlert, AlertSetting, MarketScenarioPreset } from './types/market';
 import { PRESET_SCENARIOS } from './data/mockMarketData';
 import { evaluateIntradayScale, evaluateMacroScale } from './utils/quantEngine';
@@ -33,6 +34,12 @@ export const App: React.FC = () => {
   const [metrics, setMetrics] = useState<MarketMetrics>(PRESET_SCENARIOS[0].metrics);
   const [activePresetId, setActivePresetId] = useState<string>(PRESET_SCENARIOS[0].id);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  // Real-time Live Streaming state
+  const [isAutoRefresh, setIsAutoRefresh] = useState<boolean>(true);
+  const [refreshIntervalSec, setRefreshIntervalSec] = useState<number>(5);
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(5);
+  const [enableMicroTicks, setEnableMicroTicks] = useState<boolean>(true);
 
   // Modals & Drawers
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -138,16 +145,24 @@ export const App: React.FC = () => {
     }
   }, [metrics]);
 
-  // Auto-fetch latest live quotes on initial load
+  const metricsRef = useRef(metrics);
+  useEffect(() => {
+    metricsRef.current = metrics;
+  }, [metrics]);
+
+  // Sync countdown whenever interval changes
+  useEffect(() => {
+    setSecondsRemaining(refreshIntervalSec);
+  }, [refreshIntervalSec]);
+
+  // Initial fetch on mount or preset switch
   useEffect(() => {
     let isMounted = true;
     if (activePresetId === 'live_current') {
       setIsRefreshing(true);
-      fetchLiveMarketData(metrics)
+      fetchLiveMarketData(metricsRef.current)
         .then((updated) => {
-          if (isMounted) {
-            setMetrics(updated);
-          }
+          if (isMounted) setMetrics(updated);
         })
         .finally(() => {
           if (isMounted) setIsRefreshing(false);
@@ -158,32 +173,80 @@ export const App: React.FC = () => {
     };
   }, [activePresetId]);
 
-  // Live periodic simulated ticks for subtle natural price fluctuation
+  // Real-time automatic polling timer
   useEffect(() => {
-    const interval = setInterval(() => {
+    if (!isAutoRefresh || activePresetId !== 'live_current') return;
+
+    const timer = setInterval(() => {
+      setSecondsRemaining((prev) => {
+        if (prev <= 1) {
+          // Trigger live API background sync
+          fetchLiveMarketData(metricsRef.current)
+            .then((fresh) => {
+              setMetrics(fresh);
+            })
+            .catch((e) => {
+              console.warn('Realtime polling sync err', e);
+            });
+          return refreshIntervalSec;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isAutoRefresh, refreshIntervalSec, activePresetId]);
+
+  // Micro-ticks for realistic high-frequency orderbook action
+  useEffect(() => {
+    if (!enableMicroTicks || activePresetId !== 'live_current') return;
+
+    const tickInterval = setInterval(() => {
       setMetrics((prev) => {
-        const rand = (Math.random() - 0.48) * 0.08;
-        const newPrice = Number((prev.nasdaq100.price * (1 + rand * 0.001)).toFixed(2));
-        const newSp500 = Number((prev.sp500.price * (1 + rand * 0.0008)).toFixed(2));
+        const randSp = (Math.random() - 0.49) * 0.35;
+        const randNdx = (Math.random() - 0.49) * 1.4;
+        const randSpy = (Math.random() - 0.49) * 0.035;
+        const randQqq = (Math.random() - 0.49) * 0.045;
+        const randVix = (Math.random() - 0.5) * 0.015;
+
+        const newSp500Price = Number((prev.sp500.price + randSp).toFixed(2));
+        const newNdxPrice = Number((prev.nasdaq100.price + randNdx).toFixed(2));
+        const newSpyPrice = Number((prev.spy.price + randSpy).toFixed(2));
+        const newQqqPrice = Number((prev.qqq.price + randQqq).toFixed(2));
+        const newVixPrice = Number(Math.max(10, prev.vix.current + randVix).toFixed(2));
+
         const now = new Date();
-        const kstStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        const kstStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+
         return {
           ...prev,
           timestampKst: kstStr,
-          nasdaq100: {
-            ...prev.nasdaq100,
-            price: newPrice,
-          },
           sp500: {
             ...prev.sp500,
-            price: newSp500,
+            price: newSp500Price,
+          },
+          nasdaq100: {
+            ...prev.nasdaq100,
+            price: newNdxPrice,
+          },
+          spy: {
+            ...prev.spy,
+            price: newSpyPrice,
+          },
+          qqq: {
+            ...prev.qqq,
+            price: newQqqPrice,
+          },
+          vix: {
+            ...prev.vix,
+            current: newVixPrice,
           },
         };
       });
-    }, 8000);
+    }, 2800);
 
-    return () => clearInterval(interval);
-  }, []);
+    return () => clearInterval(tickInterval);
+  }, [enableMicroTicks, activePresetId]);
 
   const handleSelectPreset = (preset: MarketScenarioPreset) => {
     setMetrics(preset.metrics);
@@ -198,9 +261,10 @@ export const App: React.FC = () => {
       if (activePresetId === 'live_current') {
         const fresh = await fetchLiveMarketData(metrics);
         setMetrics(fresh);
+        setSecondsRemaining(refreshIntervalSec);
       } else {
         const now = new Date();
-        const kstStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+        const kstStr = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')} ${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
         setMetrics((prev) => ({
           ...prev,
           timestampKst: kstStr,
@@ -240,6 +304,20 @@ export const App: React.FC = () => {
           unreadAlertsCount={unreadAlertsCount}
           onOpenAlerts={() => setIsAlertsOpen(true)}
           isRefreshing={isRefreshing}
+        />
+
+        {/* Real-time Live Streaming Control Bar */}
+        <LiveStreamingBar
+          isAutoRefresh={isAutoRefresh}
+          onToggleAutoRefresh={() => setIsAutoRefresh(!isAutoRefresh)}
+          refreshIntervalSec={refreshIntervalSec}
+          onChangeInterval={(sec) => setRefreshIntervalSec(sec)}
+          secondsRemaining={secondsRemaining}
+          isRefreshing={isRefreshing}
+          onManualRefresh={handleRefresh}
+          lastUpdatedTime={metrics.timestampKst}
+          enableMicroTicks={enableMicroTicks}
+          onToggleMicroTicks={() => setEnableMicroTicks(!enableMicroTicks)}
         />
 
         {/* Live Active Toast Alert Popup */}
@@ -343,7 +421,7 @@ export const App: React.FC = () => {
               <BottomScaleGauge metrics={metrics} />
 
               {/* ⏱️ 1. 시장 스냅샷 Cards */}
-              <MarketSnapshotCards metrics={metrics} />
+              <MarketSnapshotCards metrics={metrics} isStreaming={isAutoRefresh} />
             </div>
           )}
 
